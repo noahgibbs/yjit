@@ -13,7 +13,6 @@
 #include "yjit_iface.h"
 #include "yjit_codegen.h"
 #include "yjit_core.h"
-#include "yjit_hooks.inc"
 #include "darray.h"
 
 #ifdef HAVE_LIBCAPSTONE
@@ -52,16 +51,14 @@ static const rb_data_type_t yjit_block_type = {
 void
 cb_write_pre_call_bytes(codeblock_t* cb)
 {
-    for (size_t i = 0; i < sizeof(yjit_with_ec_pre_call_bytes); ++i)
-        cb_write_byte(cb, yjit_with_ec_pre_call_bytes[i]);
+    //TODO remove
 }
 
 // Write the YJIT exit post-call bytes
 void
 cb_write_post_call_bytes(codeblock_t* cb)
 {
-    for (size_t i = 0; i < sizeof(yjit_with_ec_post_call_bytes); ++i)
-        cb_write_byte(cb, yjit_with_ec_post_call_bytes[i]);
+    ret(cb);
 }
 
 // Get the PC for a given index in an iseq
@@ -803,12 +800,12 @@ rb_yjit_collect_binding_set(void)
     yjit_runtime_counters.binding_set++;
 }
 
-const VALUE *
-rb_yjit_count_side_exit_op(const VALUE *exit_pc)
+const void *
+rb_yjit_count_side_exit_op(const rb_control_frame_t *const cfp)
 {
-    int insn = rb_vm_insn_addr2opcode((const void *)*exit_pc);
+    int insn = rb_vm_insn_addr2opcode(*(const void **)cfp->pc);
     exit_op_count[insn]++;
-    return exit_pc; // This function must return exit_pc!
+    return cfp; // This function must return cfp!
 }
 
 struct insn_count {
@@ -1041,7 +1038,7 @@ rb_yjit_call_threshold(void)
 void
 rb_yjit_init(struct rb_yjit_options *options)
 {
-    if (!yjit_scrape_successful || !PLATFORM_SUPPORTED_P) {
+    if (!PLATFORM_SUPPORTED_P) {
         return;
     }
 

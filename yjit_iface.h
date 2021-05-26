@@ -107,8 +107,8 @@ void assume_method_lookup_stable(VALUE receiver_klass, const rb_callable_method_
 RBIMPL_ATTR_NODISCARD() bool assume_single_ractor_mode(block_t *block);
 void assume_stable_global_constant_state(block_t *block);
 
-// this function *must* return passed exit_pc
-const VALUE *rb_yjit_count_side_exit_op(const VALUE *exit_pc);
+// this function *must* return passed cfp
+const void *rb_yjit_count_side_exit_op(const rb_control_frame_t *const cfp);
 
 void yjit_unlink_method_lookup_dependency(block_t *block);
 void yjit_block_assumptions_free(block_t *block);

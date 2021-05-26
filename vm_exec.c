@@ -42,6 +42,7 @@ vm_insns_counter_show_results_at_exit(void)
     }
 }
 #else
+RBIMPL_ATTR_MAYBE_UNUSED()
 static void vm_insns_counter_count_insn(int insn) {}
 #endif
 

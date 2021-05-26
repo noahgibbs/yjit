@@ -224,19 +224,17 @@ yjit_comment_array_t yjit_code_comments;
 
 // Save YJIT registers prior to a C call
 static void
-yjit_save_regs(codeblock_t* cb)
+yjit_save_regs(codeblock_t *cb)
 {
     push(cb, REG_CFP);
     push(cb, REG_EC);
     push(cb, REG_SP);
-    push(cb, REG_SP); // Maintain 16-byte RSP alignment
 }
 
 // Restore YJIT registers after a C call
 static void
-yjit_load_regs(codeblock_t* cb)
+yjit_load_regs(codeblock_t *cb)
 {
-    pop(cb, REG_SP); // Maintain 16-byte RSP alignment
     pop(cb, REG_SP);
     pop(cb, REG_EC);
     pop(cb, REG_CFP);
@@ -278,14 +276,17 @@ yjit_gen_exit(jitstate_t *jit, ctx_t *ctx, codeblock_t *cb)
     // Update the CFP on the EC
     mov(cb, member_opnd(REG_EC, rb_execution_context_t, cfp), REG_CFP);
 
-    // Put PC into the return register, which the post call bytes dispatches to
+    // cfp->pc = exit_pc
     mov(cb, RAX, const_ptr_opnd(exit_pc));
     mov(cb, member_opnd(REG_CFP, rb_control_frame_t, pc), RAX);
+
+    // Put cfp into return register
+    mov(cb, RAX, REG_CFP);
 
     // Accumulate stats about interpreter exits
 #if RUBY_DEBUG
     if (rb_yjit_opts.gen_stats) {
-        mov(cb, RDI, const_ptr_opnd(exit_pc));
+        mov(cb, RDI, REG_CFP);
         call_ptr(cb, RSI, (void *)&rb_yjit_count_side_exit_op);
     }
 #endif
@@ -307,8 +308,8 @@ yjit_gen_leave_exit(codeblock_t *cb)
     // Every exit to the interpreter should be counted
     GEN_COUNTER_INC(cb, leave_interp_return);
 
-    // Put PC into the return register, which the post call bytes dispatches to
-    mov(cb, RAX, member_opnd(REG_CFP, rb_control_frame_t, pc));
+    // Put REG_CFP into the return register like the call threaded interpreter expects
+    mov(cb, RAX, REG_CFP);
 
     cb_write_post_call_bytes(cb);
 
