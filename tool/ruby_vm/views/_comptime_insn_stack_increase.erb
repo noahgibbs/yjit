@@ -7,6 +7,7 @@
 %# details.
 %#
 PUREFUNC(MAYBE_UNUSED(static int comptime_insn_stack_increase(int depth, int insn, const VALUE *opes)));
+PUREFUNC(MAYBE_UNUSED(static rb_snum_t insn_stack_increase(enum ruby_vminsn_type insn, const VALUE *opes)));
 PUREFUNC(static rb_snum_t comptime_insn_stack_increase_dispatch(enum ruby_vminsn_type insn, const VALUE *opes));
 
 rb_snum_t
@@ -48,6 +49,42 @@ comptime_insn_stack_increase_dispatch(enum ruby_vminsn_type insn, const VALUE *o
               v[:type] = 'CALL_INFO'
             end
             i.cast_from_VALUE v, "opes[#{j}]"
+          end.join(", ")
+        %>);
+% end
+    }
+}
+
+rb_snum_t
+insn_stack_increase(enum ruby_vminsn_type insn, const VALUE *opes)
+{
+    static const signed char t[] = {
+% RubyVM::Instructions.each_slice 8 do |a|
+        <%= a.map { |i|
+          if i.has_attribute?('sp_inc')
+            '-127'
+          else
+            sprintf("%4d", i.rets.size - i.pops.size)
+          end
+        }.join(', ') -%>,
+% end
+    };
+    signed char c = t[insn];
+
+    ASSERT_VM_INSTRUCTION_SIZE(t);
+    if (c != -127) {
+        return c;
+    }
+    else switch(insn) {
+    default:
+        UNREACHABLE;
+% RubyVM::Instructions.each do |i|
+%   next unless i.has_attribute?('sp_inc')
+%   attr_function = "attr_sp_inc_#{i.name}"
+    case <%= i.bin %>:
+        return <%= attr_function %>(<%=
+          i.opes.map.with_index do |v, j|
+            "(#{v[:type]})(opes[#{j}])"
           end.join(", ")
         %>);
 % end

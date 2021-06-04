@@ -265,7 +265,6 @@ yjit_gen_exit(jitstate_t *jit, ctx_t *ctx, codeblock_t *cb)
         mov(cb, mem_opnd(64, REG0, 0), REG1);
     }
 
-    // Generate the code to exit to the interpreters
     // Write the adjusted SP back into the CFP
     if (ctx->sp_offset != 0) {
         x86opnd_t stack_pointer = ctx_sp_opnd(ctx, 0);
@@ -388,6 +387,66 @@ jit_jump_to_next_insn(jitstate_t *jit, const ctx_t *current_context)
     );
 }
 
+// Call interpreter handler for one bytecode instruction
+static void
+jit_interp_fallback(jitstate_t *jit, ctx_t *ctx)
+{
+    // In psudo code:
+    //     reconstruct_sp();
+    //     reconstruct_pc();
+    //     next_pc = jit->pc + insn_len(jit->opcode);
+    //     cfp = handler_for_pc();
+    //     if (cfp == REG_CFP && cfp->pc == next_pc) {
+    //         CONTINUE_IN_OUTPUT_CODE;
+    //     }
+    //     else {
+    //         RETURN_TO_VM_EXEC;
+    //     }
+
+    // Reconstrtuct interpreter cfp->sp
+    jit_save_sp(jit, ctx);
+
+    // Write cfp->pc
+    // TODO: side exit code also writes ec->cfp. Doesn't seem necessary?
+    mov(cb, REG0, const_ptr_opnd(jit->pc));
+    mov(cb, mem_opnd(64, REG_CFP, offsetof(rb_control_frame_t, pc)), REG0);
+
+    // Call the handler. Note, REG_EC == C_ARG_REGS[0] and REG_CFP == C_ARG_REGS[1].
+    STATIC_ASSERT(call_threaded_only, OPT_CALL_THREADED_CODE);
+    yjit_save_regs(cb);
+    rb_insn_func_t handler = *(rb_insn_func_t *)jit->pc;
+    call_ptr(cb, REG0, (void *)handler);
+    yjit_load_regs(cb);
+
+    {
+        // Adjust ctx based on changes the handler makes
+        int sp_change = (int)insn_stack_increase(jit->opcode, jit->pc + 1);
+        if (sp_change > 0) {
+            for (int i = 0; i < sp_change; i++) {
+                ctx_stack_push(ctx, TYPE_UNKNOWN);
+            }
+        }
+        else if (sp_change < 0) {
+            ctx_stack_pop(ctx, -sp_change);
+        }
+        ctx->sp_offset = 0;
+    }
+
+    // Check if the handler pushed or popped a frame
+    const int CONTINUE_RUNNING = cb_new_label(cb, "CONTINUE_RUNNING");
+    const int BAIL = cb_new_label(cb, "BAIL");
+    cmp(cb, RAX, REG_CFP);
+    jne_label(cb, BAIL);
+    mov(cb, REG1, const_ptr_opnd(jit->pc + insn_len(jit->opcode)));
+    // Check if handler performed an interpreter jump
+    cmp(cb, mem_opnd(64, REG_CFP, offsetof(rb_control_frame_t, pc)), REG1);
+    je_label(cb, CONTINUE_RUNNING);
+    cb_write_label(cb, BAIL);
+    ret(cb); // Return what the handler returns. RAX not touched since handler return.
+    cb_write_label(cb, CONTINUE_RUNNING);
+    cb_link_labels(cb);
+}
+
 // Compile a sequence of bytecode instructions for a given basic block version
 void
 yjit_gen_block(block_t *block, rb_execution_context_t *ec)
@@ -425,7 +484,7 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
     block->start_pos = cb->write_pos;
 
     // For each instruction to compile
-    for (;;) {
+    for (;insn_idx < iseq->body->iseq_size;) {
         // Get the current pc and opcode
         VALUE *pc = yjit_iseq_pc_at_idx(iseq, insn_idx);
         int opcode = yjit_opcode_at_pc(iseq, pc);
@@ -444,42 +503,37 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
         jit.opcode = opcode;
 
         // Lookup the codegen function for this instruction
+        codegen_status_t status = YJIT_CANT_COMPILE;
         codegen_fn gen_fn = gen_fns[opcode];
-        if (!gen_fn) {
-            // If we reach an unknown instruction,
-            // exit to the interpreter and stop compiling
-            yjit_gen_exit(&jit, ctx, cb);
-            break;
+        if (gen_fn) {
+            if (0) {
+                fprintf(stderr, "compiling %d: %s\n", insn_idx, insn_name(opcode));
+                print_str(cb, insn_name(opcode));
+            }
+
+            // :count-placement:
+            // Count bytecode instructions that execute in generated code.
+            // Note that the increment happens even when the output takes side exit.
+            GEN_COUNTER_INC(cb, exec_instruction);
+
+            // Add a comment for the name of the YARV instruction
+            ADD_COMMENT(cb, insn_name(opcode));
+
+            // Call the code generation function
+            status = gen_fn(&jit, ctx);
+
+            // For now, reset the chain depth after each instruction as only the
+            // first instruction in the block can concern itself with the depth.
+            ctx->chain_depth = 0;
         }
 
-        if (0) {
-            fprintf(stderr, "compiling %d: %s\n", insn_idx, insn_name(opcode));
-            print_str(cb, insn_name(opcode));
-        }
-
-        // :count-placement:
-        // Count bytecode instructions that execute in generated code.
-        // Note that the increment happens even when the output takes side exit.
-        GEN_COUNTER_INC(cb, exec_instruction);
-
-        // Add a comment for the name of the YARV instruction
-        ADD_COMMENT(cb, insn_name(opcode));
-
-        // Call the code generation function
-        codegen_status_t status = gen_fn(&jit, ctx);
-
-        // For now, reset the chain depth after each instruction as only the
-        // first instruction in the block can concern itself with the depth.
-        ctx->chain_depth = 0;
-
-        // If we can't compile this instruction
-        // exit to the interpreter and stop compiling
+        // TODO: should probably not compile trace instructions
+        // If we can't compile this instruction, generate a fallback to the interpreter.
         if (status == YJIT_CANT_COMPILE) {
             // TODO: if the codegen funcion makes changes to ctx and then return YJIT_CANT_COMPILE,
             // the exit this generates would be wrong. We could save a copy of the entry context
             // and assert that ctx is the same here.
-            yjit_gen_exit(&jit, ctx, cb);
-            break;
+            jit_interp_fallback(&jit, ctx);
         }
 
         // Move to the next instruction to compile
