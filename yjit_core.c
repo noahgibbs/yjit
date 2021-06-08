@@ -567,6 +567,7 @@ branch_stub_hit(branch_t* branch, const uint32_t target_idx, rb_execution_contex
     }
     else
     {
+        fprintf(stderr, "hitting branch %p\n", branch);
         //fprintf(stderr, "\nstub hit, branch: %p, target idx: %d\n", branch, target_idx);
         //fprintf(stderr, "blockid.iseq=%p, blockid.idx=%d\n", target.iseq, target.idx);
         //fprintf(stderr, "chain_depth=%d\n", target_ctx->chain_depth);
@@ -608,6 +609,13 @@ branch_stub_hit(branch_t* branch, const uint32_t target_idx, rb_execution_contex
             // Compile the new block version
             p_block = gen_block_version(target, target_ctx, ec);
             RUBY_ASSERT(p_block);
+                    if (branch->shape == (uint8_t)target_idx && p_block->start_pos != branch->end_pos) {
+                        VALUE mesg = rb_iseq_disasm(target.iseq);
+                        char *ptr;
+                        long len;
+                        RSTRING_GETMEM(mesg, ptr, len);
+                        fprintf(stderr, "thing disasemble:\n %.*s %d\n", (int)len, ptr, (int)target.idx);
+                    }
             RUBY_ASSERT(!(branch->shape == (uint8_t)target_idx && p_block->start_pos != branch->end_pos));
         }
 
@@ -672,7 +680,7 @@ uint8_t* get_branch_target(
 
     // Call branch_stub_hit(branch_idx, target_idx, ec)
     mov(ocb, C_ARG_REGS[2], REG_EC);
-    mov(ocb, C_ARG_REGS[1],  imm_opnd(target_idx));
+    mov(ocb, C_ARG_REGS[1], imm_opnd(target_idx));
     mov(ocb, C_ARG_REGS[0], const_ptr_opnd(branch));
     call_ptr(ocb, REG0, (void *)&branch_stub_hit);
 
@@ -814,6 +822,19 @@ yjit_free_block(block_t *block)
     yjit_unlink_method_lookup_dependency(block);
     yjit_block_assumptions_free(block);
 
+    // Remove this block from the predecessor's targets
+    rb_darray_for(block->incoming, incoming_idx) {
+        // Branch from the predecessor to us
+        branch_t* pred_branch = rb_darray_get(block->incoming, incoming_idx);
+
+        // If this is us, nullify the target block
+        for (size_t succ_idx = 0; succ_idx < 2; succ_idx++) {
+            if (pred_branch->blocks[succ_idx] == block) {
+                pred_branch->blocks[succ_idx] = NULL;
+            }
+        }
+    }
+
     // For each outgoing branch
     rb_darray_for(block->outgoing, branch_idx) {
         branch_t* out_branch = rb_darray_get(block->outgoing, branch_idx);
@@ -834,6 +855,8 @@ yjit_free_block(block_t *block)
                 }
             }
         }
+
+        fprintf(stderr, "free branch %p\n", out_branch);
 
         // Free the outgoing branch entry
         free(out_branch);

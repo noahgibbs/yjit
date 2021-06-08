@@ -1004,7 +1004,6 @@ rb_dump_machine_register(const ucontext_t *ctx)
 void
 rb_vm_bugreport(const void *ctx)
 {
-    return;
 #if RUBY_DEVEL
     const char *cmd = getenv("RUBY_ON_BUG");
     if (cmd) {

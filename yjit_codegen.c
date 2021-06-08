@@ -417,18 +417,34 @@ jit_interp_fallback(jitstate_t *jit, ctx_t *ctx)
     rb_insn_func_t handler = *(rb_insn_func_t *)jit->pc;
     call_ptr(cb, REG0, (void *)handler);
     yjit_load_regs(cb);
+    // Reload REG_SP since the handler made changes to cfp->sp
+    mov(cb, REG_SP, member_opnd(REG_CFP, rb_control_frame_t, sp));
 
+    // Adjust ctx based on changes the handler makes to the stack.
     {
-        // Adjust ctx based on changes the handler makes
-        int sp_change = (int)insn_stack_increase(jit->opcode, jit->pc + 1);
-        if (sp_change > 0) {
-            for (int i = 0; i < sp_change; i++) {
-                ctx_stack_push(ctx, TYPE_UNKNOWN);
-            }
+        // Find in case of trace variant opcode, find the plain variant.
+        // Note, trace variant and pain variant make the same stack motion.
+        // TODO: pull this out into iseq.c before PR.
+        int opcode = jit->opcode;
+        if (opcode > VM_INSTRUCTION_SIZE/2) opcode -= VM_INSTRUCTION_SIZE/2;
+
+        int sp_change = (int)insn_stack_increase(opcode, jit->pc + 1);
+        if (1) {
+            fprintf(stderr, "sp_change for %s: %d\n", insn_name(jit->opcode), sp_change);
         }
-        else if (sp_change < 0) {
-            ctx_stack_pop(ctx, -sp_change);
+
+        // Throw away all type information in the context. This is because
+        // sp_change doesn't tell us how many items the handler pops. For example for
+        // the checktype instruction, sp_change is 0, but it pops one item and pushes one.
+        // Ideally for checktype we would only forget the type in the context for the top item
+        // on the stack.
+        const uint16_t new_stack_size = ctx->stack_size + sp_change;
+        ctx_stack_pop(ctx, ctx->stack_size);
+        for (uint16_t i = 0; i < new_stack_size; i++) {
+            ctx_stack_push(ctx, TYPE_UNKNOWN);
         }
+
+        // REG_SP still equals cfp->sp, but ctx_stack_{push,pop} changes sp_offset. Reset it to 0.
         ctx->sp_offset = 0;
     }
 
@@ -437,12 +453,14 @@ jit_interp_fallback(jitstate_t *jit, ctx_t *ctx)
     const int BAIL = cb_new_label(cb, "BAIL");
     cmp(cb, RAX, REG_CFP);
     jne_label(cb, BAIL);
-    mov(cb, REG1, const_ptr_opnd(jit->pc + insn_len(jit->opcode)));
+
     // Check if handler performed an interpreter jump
+    mov(cb, REG1, const_ptr_opnd(jit->pc + insn_len(jit->opcode)));
     cmp(cb, mem_opnd(64, REG_CFP, offsetof(rb_control_frame_t, pc)), REG1);
     je_label(cb, CONTINUE_RUNNING);
+
     cb_write_label(cb, BAIL);
-    ret(cb); // Return what the handler returns. RAX not touched since handler return.
+    ret(cb); // Return what the handler returns. RAX preserved since handler return.
     cb_write_label(cb, CONTINUE_RUNNING);
     cb_link_labels(cb);
 }
