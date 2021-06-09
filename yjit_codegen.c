@@ -420,6 +420,7 @@ jit_interp_fallback(jitstate_t *jit, ctx_t *ctx)
     }
 
     // Call the handler. Note, REG_EC == C_ARG_REGS[0] and REG_CFP == C_ARG_REGS[1].
+    // Note for TracePoint support: this calls the handler observed in the iseq at compile time.
     STATIC_ASSERT(call_threaded_only, OPT_CALL_THREADED_CODE);
     yjit_save_regs(cb);
     call_ptr(cb, REG0, (void *)handler);
@@ -461,7 +462,8 @@ jit_interp_fallback(jitstate_t *jit, ctx_t *ctx)
     cmp(cb, RAX, REG_CFP);
     jne_label(cb, BAIL);
 
-    // Check if handler performed an interpreter jump
+    // Check if handler performed an interpreter jump.
+    // This chunck could be optmized away by tagging instructions that never jump.
     mov(cb, REG1, const_ptr_opnd(jit->pc + insn_len(jit->opcode)));
     cmp(cb, mem_opnd(64, REG_CFP, offsetof(rb_control_frame_t, pc)), REG1);
     je_label(cb, CONTINUE_RUNNING);
