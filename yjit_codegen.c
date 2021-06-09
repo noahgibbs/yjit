@@ -1,5 +1,6 @@
-#include "insns.inc"
 #include "internal.h"
+
+#include "insns.inc"
 #include "vm_core.h"
 #include "vm_sync.h"
 #include "vm_callinfo.h"
@@ -429,7 +430,7 @@ jit_interp_fallback(jitstate_t *jit, ctx_t *ctx)
         if (opcode > VM_INSTRUCTION_SIZE/2) opcode -= VM_INSTRUCTION_SIZE/2;
 
         int sp_change = (int)insn_stack_increase(opcode, jit->pc + 1);
-        if (1) {
+        if (0) {
             fprintf(stderr, "sp_change for %s: %d\n", insn_name(jit->opcode), sp_change);
         }
 
@@ -551,7 +552,15 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
             // TODO: if the codegen funcion makes changes to ctx and then return YJIT_CANT_COMPILE,
             // the exit this generates would be wrong. We could save a copy of the entry context
             // and assert that ctx is the same here.
-            jit_interp_fallback(&jit, ctx);
+            if (opcode == BIN(opt_getinlinecache)) {
+                // opt_getinlinecache wants to be in a block all on its own.
+                // TODO: before PR expand comment about the scheme. "so that when the block gets invalidated..."
+                yjit_gen_exit(&jit, ctx, cb);
+                break;
+            }
+            else {
+                jit_interp_fallback(&jit, ctx);
+            }
         }
 
         // Move to the next instruction to compile

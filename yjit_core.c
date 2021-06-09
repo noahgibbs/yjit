@@ -567,7 +567,6 @@ branch_stub_hit(branch_t* branch, const uint32_t target_idx, rb_execution_contex
     }
     else
     {
-        fprintf(stderr, "hitting branch %p\n", branch);
         //fprintf(stderr, "\nstub hit, branch: %p, target idx: %d\n", branch, target_idx);
         //fprintf(stderr, "blockid.iseq=%p, blockid.idx=%d\n", target.iseq, target.idx);
         //fprintf(stderr, "chain_depth=%d\n", target_ctx->chain_depth);
@@ -855,8 +854,6 @@ yjit_free_block(block_t *block)
                 }
             }
         }
-
-        fprintf(stderr, "free branch %p\n", out_branch);
 
         // Free the outgoing branch entry
         free(out_branch);
