@@ -412,10 +412,16 @@ jit_interp_fallback(jitstate_t *jit, ctx_t *ctx)
     mov(cb, REG0, const_ptr_opnd(jit->pc));
     mov(cb, mem_opnd(64, REG_CFP, offsetof(rb_control_frame_t, pc)), REG0);
 
+    // Find the interpreter bytecode handler
+    const void *handler;
+    {
+        const void *const *handler_table = rb_vm_get_insns_address_table();
+        handler = handler_table[jit->opcode];
+    }
+
     // Call the handler. Note, REG_EC == C_ARG_REGS[0] and REG_CFP == C_ARG_REGS[1].
     STATIC_ASSERT(call_threaded_only, OPT_CALL_THREADED_CODE);
     yjit_save_regs(cb);
-    rb_insn_func_t handler = *(rb_insn_func_t *)jit->pc;
     call_ptr(cb, REG0, (void *)handler);
     yjit_load_regs(cb);
     // Reload REG_SP since the handler made changes to cfp->sp
