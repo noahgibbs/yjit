@@ -530,7 +530,7 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
         jit.opcode = opcode;
 
         // Lookup the codegen function for this instruction
-        codegen_status_t status = YJIT_CANT_COMPILE;
+        codegen_status_t status;
         codegen_fn gen_fn = gen_fns[opcode];
         if (gen_fn) {
             if (0) {
@@ -552,23 +552,20 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
             // For now, reset the chain depth after each instruction as only the
             // first instruction in the block can concern itself with the depth.
             ctx->chain_depth = 0;
-        }
 
-        // TODO: should probably not compile trace instructions
-        // If we can't compile this instruction, generate a fallback to the interpreter.
-        if (status == YJIT_CANT_COMPILE) {
-            // TODO: if the codegen funcion makes changes to ctx and then return YJIT_CANT_COMPILE,
-            // the exit this generates would be wrong. We could save a copy of the entry context
-            // and assert that ctx is the same here.
-            if (opcode == BIN(opt_getinlinecache)) {
-                // opt_getinlinecache wants to be in a block all on its own.
-                // TODO: before PR expand comment about the scheme. "so that when the block gets invalidated..."
-                yjit_gen_exit(&jit, ctx, cb);
+            if (status == YJIT_CANT_COMPILE) {
+                // Some of codegen functions rely on YJIT_CANT_COMPILE
+                // terminating the block, e.g. send instruction part of a guard
+                // chain and opt_getinlinecache.
+                jit_interp_fallback(&jit, ctx);
+                // XXX: What happens if we were the last instruction in the iseq?
+                jit_jump_to_next_insn(&jit, ctx);
                 break;
             }
-            else {
-                jit_interp_fallback(&jit, ctx);
-            }
+        }
+        else {
+            status = YJIT_KEEP_COMPILING;
+            jit_interp_fallback(&jit, ctx);
         }
 
         // Move to the next instruction to compile
