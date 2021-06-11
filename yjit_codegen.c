@@ -390,7 +390,7 @@ jit_jump_to_next_insn(jitstate_t *jit, const ctx_t *current_context)
 
 // Call interpreter handler for one bytecode instruction
 static void
-jit_interp_fallback(jitstate_t *jit, ctx_t *ctx)
+jit_interp_fallback_for_one(jitstate_t *jit, ctx_t *ctx)
 {
     // In psudo code:
     //     reconstruct_sp();
@@ -553,19 +553,37 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
             // first instruction in the block can concern itself with the depth.
             ctx->chain_depth = 0;
 
+            // Use interpreter fallback if codegen can't compile the current
+            // instruction.
             if (status == YJIT_CANT_COMPILE) {
+                jit_interp_fallback_for_one(&jit, ctx);
+
                 // Some of codegen functions rely on YJIT_CANT_COMPILE
                 // terminating the block, e.g. send instruction part of a guard
                 // chain and opt_getinlinecache.
-                jit_interp_fallback(&jit, ctx);
-                // XXX: What happens if we were the last instruction in the iseq?
-                jit_jump_to_next_insn(&jit, ctx);
-                break;
+                uint32_t next_insn_idx = insn_idx + insn_len(opcode);
+                if (next_insn_idx < iseq->body->iseq_size) {
+                    jit_jump_to_next_insn(&jit, ctx);
+                }
+                status = YJIT_END_BLOCK;
             }
         }
         else {
+            // No codegen for this instruction. Use interpreter fallback.
+            jit_interp_fallback_for_one(&jit, ctx);
             status = YJIT_KEEP_COMPILING;
-            jit_interp_fallback(&jit, ctx);
+
+            uint32_t next_insn_idx = insn_idx + insn_len(opcode);
+            if (next_insn_idx < iseq->body->iseq_size) {
+                VALUE *next_pc = yjit_iseq_pc_at_idx(iseq, next_insn_idx);
+                int next_opcode = yjit_opcode_at_pc(iseq, next_pc);
+                // Terminate the block if we know how to codegen for the next
+                // instruction. This prevents having two calls in the same block.
+                if (gen_fns[next_opcode]) {
+                    jit_jump_to_next_insn(&jit, ctx);
+                    status = YJIT_END_BLOCK;
+                }
+            }
         }
 
         // Move to the next instruction to compile

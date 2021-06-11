@@ -855,6 +855,13 @@ yjit_free_block(block_t *block)
             }
         }
 
+        uint8_t *start = cb_get_ptr(cb, out_branch->start_pos);
+        uint8_t *end = cb_get_ptr(cb, out_branch->end_pos);
+        while (start < end) {
+            *start = 0xcc; // int3
+            start++;
+        }
+
         // Free the outgoing branch entry
         free(out_branch);
     }
