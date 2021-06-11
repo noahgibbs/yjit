@@ -563,7 +563,7 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
                 // chain and opt_getinlinecache.
                 uint32_t next_insn_idx = insn_idx + insn_len(opcode);
                 if (next_insn_idx < iseq->body->iseq_size) {
-                    jit_jump_to_next_insn(&jit, ctx);
+                    yjit_lazy_continuation(jit.block, next_insn_idx, ctx);
                 }
                 status = YJIT_END_BLOCK;
             }
@@ -580,10 +580,14 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
                 // Terminate the block if we know how to codegen for the next
                 // instruction. This prevents having two calls in the same block.
                 if (gen_fns[next_opcode]) {
-                    jit_jump_to_next_insn(&jit, ctx);
+                    yjit_lazy_continuation(jit.block, next_insn_idx, ctx);
                     status = YJIT_END_BLOCK;
                 }
             }
+        }
+
+        if ( false &&rb_iseq_line_no(jit.iseq, 0) == 854) {
+            fprintf(stderr, "after %04d %s, size: %d\n", insn_idx, insn_name(opcode), ctx->stack_size);
         }
 
         // Move to the next instruction to compile
@@ -668,9 +672,17 @@ gen_setn(jitstate_t* jit, ctx_t* ctx)
 {
     rb_num_t n = (rb_num_t)jit_get_arg(jit, 0);
 
+    if (n >= ctx->stack_size) {
+        VALUE mesg = rb_iseq_disasm(jit->iseq);
+        char *ptr;
+        long len;
+        RSTRING_GETMEM(mesg, ptr, len);
+        fprintf(stderr, "thing disasemble:\n %.*s %d\n", (int)len, ptr, (int)jit->insn_idx);
+
+    }
     // Get the top value and its type
     val_type_t top_type = ctx_get_opnd_type(ctx, OPND_STACK(0));
-    x86opnd_t top_val = ctx_stack_pop(ctx, 0);
+    x86opnd_t top_val = ctx_stack_opnd(ctx, 0);
 
     // Set the destination and its type
     ctx_set_opnd_type(ctx, OPND_STACK(n), top_type);

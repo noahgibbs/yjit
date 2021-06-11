@@ -280,6 +280,8 @@ void defer_compilation(
     ctx_t* cur_ctx
 );
 
+void yjit_lazy_continuation(block_t *block, uint32_t insn_idx, ctx_t *cur_ctx);
+
 void invalidate_block_version(block_t* block);
 
 void yjit_init_core(void);

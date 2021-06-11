@@ -157,6 +157,7 @@ ctx_get_opnd_type(const ctx_t* ctx, insn_opnd_t opnd)
     rb_bug("unreachable");
 }
 
+bool haha = true;
 /**
 Set the type of an instruction operand
 */
@@ -169,6 +170,13 @@ void ctx_set_opnd_type(ctx_t* ctx, insn_opnd_t opnd, val_type_t type)
 
     if (ctx->stack_size > MAX_TEMP_TYPES)
         return;
+
+    if (!(opnd.idx < ctx->stack_size)) {
+        while (haha) {
+            fprintf(stderr, "haiya tried getting %d on size of %d\n", opnd.idx, ctx->stack_size);
+            abort();
+        }
+    }
 
     RUBY_ASSERT(opnd.idx < ctx->stack_size);
     temp_mapping_t mapping = ctx->temp_mapping[ctx->stack_size - 1 - opnd.idx];
@@ -807,6 +815,26 @@ void defer_compilation(
     branch->target_ctxs[0] = next_ctx;
     branch->targets[0] = (blockid_t){ block->blockid.iseq, insn_idx };
     branch->dst_addrs[0] = get_branch_target(branch->targets[0], &next_ctx, branch, 0);
+
+    // Call the branch generation function
+    branch->start_pos = cb->write_pos;
+    gen_jump_branch(cb, branch->dst_addrs[0], NULL, SHAPE_DEFAULT);
+    branch->end_pos = cb->write_pos;
+}
+
+// Generate a lazy stub for a bytecodee instruction
+void yjit_lazy_continuation(
+    block_t *block,
+    uint32_t insn_idx,
+    ctx_t *cur_ctx
+)
+{
+    branch_t* branch = make_branch_entry(block, cur_ctx, gen_jump_branch);
+
+    // Get the branch targets or stubs
+    branch->target_ctxs[0] = *cur_ctx;
+    branch->targets[0] = (blockid_t){ block->blockid.iseq, insn_idx };
+    branch->dst_addrs[0] = get_branch_target(branch->targets[0], cur_ctx, branch, 0);
 
     // Call the branch generation function
     branch->start_pos = cb->write_pos;
