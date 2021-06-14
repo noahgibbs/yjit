@@ -14,7 +14,7 @@
 
 static const void *const insns_address_table[] = {
 % RubyVM::Instructions.each do |i|
-    LABEL_PTR(<%= i.name %>),
+    (const void *const)LABEL_PTR(<%= i.name %>),
 % end
 };
 
