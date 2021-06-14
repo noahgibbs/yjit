@@ -427,7 +427,7 @@ jit_interp_fallback_for_one(jitstate_t *jit, ctx_t *ctx)
 
     // Call the handler. Note, REG_EC == C_ARG_REGS[0] and REG_CFP == C_ARG_REGS[1].
     // Note for TracePoint support: this calls the handler observed in the iseq at compile time.
-    RUBY_ASSERT(call_threaded_only, OPT_CALL_THREADED_CODE);
+    RUBY_ASSERT(OPT_CALL_THREADED_CODE);
     yjit_save_regs(cb);
     call_ptr(cb, REG0, (void *)handler);
     yjit_load_regs(cb);
