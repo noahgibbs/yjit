@@ -6,12 +6,12 @@ YJIT - Yet Another Ruby JIT
 YJIT is a lightweight, minimalistic Ruby JIT built inside the CRuby/MRI binary.
 It lazily compiles code using a Basic Block Versioning (BBV) architecture. The target use case is that of servers running
 Ruby on Rails, an area where CRuby's MJIT has not yet managed to deliver speedups.
-To simplify development, we currently support only MacOS and Linux on x86-64, but an ARM64 backend
+To simplify development, we currently support only macOS and Linux on x86-64, but an ARM64 backend
 is part of future plans.
 This project is open source and falls under the same license as CRuby.
 
-If you wish to learn more about the architecture, there 3 recorded conference talks and two published papers:
-- [YJIT: Building a New JIT Compiler Inside CRuby](https://www.youtube.com/watch?v=vucLAqv7qpc) (MoreVMs 2021)
+If you wish to learn more about the approach taken, here are some written resources and conference talks:
+- [YJIT: Building a New JIT Compiler Inside CRuby](https://pointersgonewild.com/2021/06/02/yjit-building-a-new-jit-compiler-inside-cruby/) ([MoreVMs 2021 talk](https://www.youtube.com/watch?v=vucLAqv7qpc))
 - [Simple and Effective Type Check Removal through Lazy Basic Block Versioning](https://arxiv.org/pdf/1411.0352.pdf) ([ECOOP 2015 talk](https://www.youtube.com/watch?v=S-aHBuoiYE0))
 - [Interprocedural Type Specialization of JavaScript Programs Without Type Analysis](https://drops.dagstuhl.de/opus/volltexte/2016/6101/pdf/LIPIcs-ECOOP-2016-7.pdf) ([ECOOP 2016 talk](https://www.youtube.com/watch?v=sRNBY7Ss97A))
 
@@ -27,6 +27,15 @@ To cite this repository in your publications, please use this bibtex snippet:
   howpublished = {\url{https://github.com/Shopify/ruby/tree/yjit}},
 }
 ```
+
+## Current Limitations
+
+YJIT is a work in progress and as such may not yet be mature enough for mission-critical software. Below is a list of known limitations, all of which we plan to eventually address:
+
+- No support for the `TracePoint` API (see [#54](https://github.com/Shopify/yjit/issues/54)).
+- No garbage collection for generated code.
+
+Because there is no GC for generated code yet, your software could run out of executable memory if it is large enough. You can change how much executable memory is allocated using [YJIT's command-line options](https://github.com/Shopify/yjit#command-line-options).
 
 ## Installation
 
@@ -115,9 +124,8 @@ You can also compile YJIT in debug mode and use the `--yjit-stats` command-line 
 We welcome open source contributors. You should feel free to open new issues to report bugs or just to ask questions.
 Suggestions on how to make this readme file more helpful for new contributors are most welcome.
 
-Bug fixes and bug reports are very valuable to us. If you find bugs in YJIT, it's very possible be that nobody has reported this bug before,
-or that we don't have a good reproduction for it, so please open an issue and provide some information about your configuration and a description of how you
-encountered the problem. If you are able to produce a small reproduction to help us track down the bug, that is very much appreciated as well.
+Bug fixes and bug reports are very valuable to us. If you find a bug in YJIT, it's very possible be that nobody has reported it before,
+or that we don't have a good reproduction for it, so please open an issue and provide as much information as you can about your configuration and a description of how you encountered the problem. List the commands you used to run YJIT so that we can easily reproduce the issue on our end and investigate it. If you are able to produce a small program reproducing the error to help us track it down, that is very much appreciated as well. 
 
 If you would like to contribute a large patch to YJIT, we suggest opening an issue or a discussion on this repository so that
 we can have an active discussion. A common problem is that sometimes people submit large pull requests to open source projects
@@ -154,23 +162,28 @@ There are 3 test suites:
 The tests can be run in parallel like this:
 
 ```
-make -j16 test-all
+make -j16 test-all RUNOPTS="--yjit-call-threshold=1"
 ```
 
-You can run one specific test in `btest`:
+Or single-threaded like this, to more easily identify which specific test is failing:
 
 ```
-make btest BTESTS=bootstraptest/test_ractor.rb
+make test-all TESTOPTS=--verbose RUNOPTS="--yjit-call-threshold=1"
 ```
 
 To debug a single test in `test-all`:
 
 ```
-make test-all TESTOPTS=--verbose
-make test-all TESTS='test/-ext-/marshal/test_usrmarshal.rb' RUNRUBYOPT=--debugger=lldb
+make test-all TESTS='test/-ext-/marshal/test_usrmarshal.rb' RUNRUBYOPT=--debugger=lldb RUNOPTS="--yjit-call-threshold=1"
 ```
 
-There are shortcuts to run/debug `test.rb`:
+You can also run one specific test in `btest`:
+
+```
+make btest BTESTS=bootstraptest/test_ractor.rb RUNOPTS="--yjit-call-threshold=1"
+```
+
+There are shortcuts to run/debug your own test/repro in `test.rb`:
 
 ```
 make run  # runs ./miniruby test.rb

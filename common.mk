@@ -1036,6 +1036,7 @@ BUILTIN_RB_SRCS = \
 		$(srcdir)/kernel.rb \
 		$(srcdir)/ractor.rb \
 		$(srcdir)/timev.rb \
+		$(srcdir)/nilclass.rb \
 		$(srcdir)/prelude.rb \
 		$(srcdir)/gem_prelude.rb \
 		$(srcdir)/yjit.rb \
@@ -8376,6 +8377,7 @@ miniinit.$(OBJEXT): {$(VPATH)}miniinit.c
 miniinit.$(OBJEXT): {$(VPATH)}miniprelude.c
 miniinit.$(OBJEXT): {$(VPATH)}missing.h
 miniinit.$(OBJEXT): {$(VPATH)}node.h
+miniinit.$(OBJEXT): {$(VPATH)}nilclass.rb
 miniinit.$(OBJEXT): {$(VPATH)}numeric.rb
 miniinit.$(OBJEXT): {$(VPATH)}onigmo.h
 miniinit.$(OBJEXT): {$(VPATH)}oniguruma.h
@@ -8435,6 +8437,7 @@ mjit.$(OBJEXT): $(hdrdir)/ruby/ruby.h
 mjit.$(OBJEXT): $(hdrdir)/ruby/version.h
 mjit.$(OBJEXT): $(top_srcdir)/internal/array.h
 mjit.$(OBJEXT): $(top_srcdir)/internal/class.h
+mjit.$(OBJEXT): $(top_srcdir)/internal/compile.h
 mjit.$(OBJEXT): $(top_srcdir)/internal/compilers.h
 mjit.$(OBJEXT): $(top_srcdir)/internal/cont.h
 mjit.$(OBJEXT): $(top_srcdir)/internal/file.h
@@ -8456,6 +8459,7 @@ mjit.$(OBJEXT): {$(VPATH)}backward/2/limits.h
 mjit.$(OBJEXT): {$(VPATH)}backward/2/long_long.h
 mjit.$(OBJEXT): {$(VPATH)}backward/2/stdalign.h
 mjit.$(OBJEXT): {$(VPATH)}backward/2/stdarg.h
+mjit.$(OBJEXT): {$(VPATH)}builtin.h
 mjit.$(OBJEXT): {$(VPATH)}config.h
 mjit.$(OBJEXT): {$(VPATH)}constant.h
 mjit.$(OBJEXT): {$(VPATH)}darray.h
@@ -8467,6 +8471,9 @@ mjit.$(OBJEXT): {$(VPATH)}encoding.h
 mjit.$(OBJEXT): {$(VPATH)}gc.h
 mjit.$(OBJEXT): {$(VPATH)}id.h
 mjit.$(OBJEXT): {$(VPATH)}id_table.h
+mjit.$(OBJEXT): {$(VPATH)}insns.def
+mjit.$(OBJEXT): {$(VPATH)}insns.inc
+mjit.$(OBJEXT): {$(VPATH)}insns_info.inc
 mjit.$(OBJEXT): {$(VPATH)}intern.h
 mjit.$(OBJEXT): {$(VPATH)}internal.h
 mjit.$(OBJEXT): {$(VPATH)}internal/anyargs.h
@@ -8608,6 +8615,7 @@ mjit.$(OBJEXT): {$(VPATH)}internal/value_type.h
 mjit.$(OBJEXT): {$(VPATH)}internal/variable.h
 mjit.$(OBJEXT): {$(VPATH)}internal/warning_push.h
 mjit.$(OBJEXT): {$(VPATH)}internal/xmalloc.h
+mjit.$(OBJEXT): {$(VPATH)}iseq.h
 mjit.$(OBJEXT): {$(VPATH)}method.h
 mjit.$(OBJEXT): {$(VPATH)}missing.h
 mjit.$(OBJEXT): {$(VPATH)}mjit.c
@@ -9400,6 +9408,8 @@ object.$(OBJEXT): {$(VPATH)}internal/xmalloc.h
 object.$(OBJEXT): {$(VPATH)}kernel.rb
 object.$(OBJEXT): {$(VPATH)}kernel.rbinc
 object.$(OBJEXT): {$(VPATH)}missing.h
+object.$(OBJEXT): {$(VPATH)}nilclass.rb
+object.$(OBJEXT): {$(VPATH)}nilclass.rbinc
 object.$(OBJEXT): {$(VPATH)}object.c
 object.$(OBJEXT): {$(VPATH)}onigmo.h
 object.$(OBJEXT): {$(VPATH)}oniguruma.h
@@ -16388,6 +16398,7 @@ yjit_codegen.$(OBJEXT): $(top_srcdir)/internal/imemo.h
 yjit_codegen.$(OBJEXT): $(top_srcdir)/internal/object.h
 yjit_codegen.$(OBJEXT): $(top_srcdir)/internal/serial.h
 yjit_codegen.$(OBJEXT): $(top_srcdir)/internal/static_assert.h
+yjit_codegen.$(OBJEXT): $(top_srcdir)/internal/string.h
 yjit_codegen.$(OBJEXT): $(top_srcdir)/internal/vm.h
 yjit_codegen.$(OBJEXT): $(top_srcdir)/internal/warnings.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}assert.h
@@ -16406,6 +16417,7 @@ yjit_codegen.$(OBJEXT): {$(VPATH)}config.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}darray.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}debug_counter.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}defines.h
+yjit_codegen.$(OBJEXT): {$(VPATH)}encoding.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}id.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}id_table.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}insns.def
@@ -16556,6 +16568,8 @@ yjit_codegen.$(OBJEXT): {$(VPATH)}iseq.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}method.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}missing.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}node.h
+yjit_codegen.$(OBJEXT): {$(VPATH)}onigmo.h
+yjit_codegen.$(OBJEXT): {$(VPATH)}oniguruma.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}ruby_assert.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}ruby_atomic.h
 yjit_codegen.$(OBJEXT): {$(VPATH)}st.h
