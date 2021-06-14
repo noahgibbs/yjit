@@ -670,14 +670,6 @@ gen_setn(jitstate_t* jit, ctx_t* ctx)
 {
     rb_num_t n = (rb_num_t)jit_get_arg(jit, 0);
 
-    if (n >= ctx->stack_size) {
-        VALUE mesg = rb_iseq_disasm(jit->iseq);
-        char *ptr;
-        long len;
-        RSTRING_GETMEM(mesg, ptr, len);
-        fprintf(stderr, "thing disasemble:\n %.*s %d\n", (int)len, ptr, (int)jit->insn_idx);
-
-    }
     // Get the top value and its type
     val_type_t top_type = ctx_get_opnd_type(ctx, OPND_STACK(0));
     x86opnd_t top_val = ctx_stack_opnd(ctx, 0);
