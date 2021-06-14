@@ -266,6 +266,7 @@ yjit_gen_exit(jitstate_t *jit, ctx_t *ctx, codeblock_t *cb)
         mov(cb, mem_opnd(64, REG0, 0), REG1);
     }
 
+    // Generate the code to exit to the interpreters
     // Write the adjusted SP back into the CFP
     if (ctx->sp_offset != 0) {
         x86opnd_t stack_pointer = ctx_sp_opnd(ctx, 0);
@@ -512,7 +513,7 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
     block->start_pos = cb->write_pos;
 
     // For each instruction to compile
-    for (;insn_idx < iseq->body->iseq_size;) {
+    while (insn_idx < iseq->body->iseq_size) {
         // Get the current pc and opcode
         VALUE *pc = yjit_iseq_pc_at_idx(iseq, insn_idx);
         int opcode = yjit_opcode_at_pc(iseq, pc);

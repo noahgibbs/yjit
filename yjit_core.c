@@ -157,7 +157,6 @@ ctx_get_opnd_type(const ctx_t* ctx, insn_opnd_t opnd)
     rb_bug("unreachable");
 }
 
-bool haha = true;
 /**
 Set the type of an instruction operand
 */
