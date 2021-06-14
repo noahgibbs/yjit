@@ -171,13 +171,6 @@ void ctx_set_opnd_type(ctx_t* ctx, insn_opnd_t opnd, val_type_t type)
     if (ctx->stack_size > MAX_TEMP_TYPES)
         return;
 
-    if (!(opnd.idx < ctx->stack_size)) {
-        while (haha) {
-            fprintf(stderr, "haiya tried getting %d on size of %d\n", opnd.idx, ctx->stack_size);
-            abort();
-        }
-    }
-
     RUBY_ASSERT(opnd.idx < ctx->stack_size);
     temp_mapping_t mapping = ctx->temp_mapping[ctx->stack_size - 1 - opnd.idx];
 
@@ -616,13 +609,6 @@ branch_stub_hit(branch_t* branch, const uint32_t target_idx, rb_execution_contex
             // Compile the new block version
             p_block = gen_block_version(target, target_ctx, ec);
             RUBY_ASSERT(p_block);
-                    if (branch->shape == (uint8_t)target_idx && p_block->start_pos != branch->end_pos) {
-                        VALUE mesg = rb_iseq_disasm(target.iseq);
-                        char *ptr;
-                        long len;
-                        RSTRING_GETMEM(mesg, ptr, len);
-                        fprintf(stderr, "thing disasemble:\n %.*s %d\n", (int)len, ptr, (int)target.idx);
-                    }
             RUBY_ASSERT(!(branch->shape == (uint8_t)target_idx && p_block->start_pos != branch->end_pos));
         }
 

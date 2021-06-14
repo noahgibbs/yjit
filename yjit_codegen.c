@@ -291,7 +291,8 @@ yjit_gen_exit(jitstate_t *jit, ctx_t *ctx, codeblock_t *cb)
     }
 #endif
 
-    cb_write_post_call_bytes(cb);
+    // Return to interpreter loop (vm_exec_core()).
+    ret(cb);
 
     return code_ptr;
 }
@@ -311,7 +312,8 @@ yjit_gen_leave_exit(codeblock_t *cb)
     // Put REG_CFP into the return register like the call threaded interpreter expects
     mov(cb, RAX, REG_CFP);
 
-    cb_write_post_call_bytes(cb);
+    // Return to interpreter loop (vm_exec_core()).
+    ret(cb);
 
     return code_ptr;
 }
@@ -340,9 +342,6 @@ yjit_entry_prologue(void)
     cb_align_pos(cb, 64);
 
     uint8_t *code_ptr = cb_get_ptr(cb, cb->write_pos);
-
-    // Write the interpreter entry prologue
-    cb_write_pre_call_bytes(cb);
 
     // Load the current SP from the CFP into REG_SP
     mov(cb, REG_SP, member_opnd(REG_CFP, rb_control_frame_t, sp));
@@ -401,18 +400,19 @@ jit_interp_fallback_for_one(jitstate_t *jit, ctx_t *ctx)
     //         CONTINUE_IN_OUTPUT_CODE;
     //     }
     //     else {
-    //         RETURN_TO_VM_EXEC;
+    //         RETURN_TO_INTERPRETER_LOOP;
     //     }
 
     // Reconstrtuct interpreter cfp->sp
     jit_save_sp(jit, ctx);
 
     // Write cfp->pc
-    // TODO: side exit code also writes ec->cfp. Doesn't seem necessary?
     mov(cb, REG0, const_ptr_opnd(jit->pc));
     mov(cb, mem_opnd(64, REG_CFP, offsetof(rb_control_frame_t, pc)), REG0);
 
     // Find the interpreter bytecode handler
+    // Note, looking it up in the table instead of dereferencing PC since
+    // PC might point to a output code entry point.
     const void *handler;
     {
         const void *const *handler_table = rb_vm_get_insns_address_table();
@@ -430,13 +430,11 @@ jit_interp_fallback_for_one(jitstate_t *jit, ctx_t *ctx)
 
     // Adjust ctx based on changes the handler makes to the stack.
     {
-        // Find in case of trace variant opcode, find the plain variant.
+        // Find the stack delta mutation of the instruction.
         // Note, trace variant and pain variant make the same stack motion.
-        // TODO: pull this out into iseq.c before PR.
-        int opcode = jit->opcode;
-        if (opcode > VM_INSTRUCTION_SIZE/2) opcode -= VM_INSTRUCTION_SIZE/2;
-
-        int sp_change = (int)insn_stack_increase(opcode, jit->pc + 1);
+        // insn_sp_change() only handles non-trace opocode variants, so normlaize it.
+        int opcode = rb_vm_normalize_opcode(jit->opcode);
+        int sp_change = (int)vm_insn_stack_increase(opcode, jit->pc + 1);
         if (0) {
             fprintf(stderr, "sp_change for %s: %d\n", insn_name(jit->opcode), sp_change);
         }
@@ -468,8 +466,11 @@ jit_interp_fallback_for_one(jitstate_t *jit, ctx_t *ctx)
     cmp(cb, mem_opnd(64, REG_CFP, offsetof(rb_control_frame_t, pc)), REG1);
     je_label(cb, CONTINUE_RUNNING);
 
+    // Return to interpreter loop (vm_exec_core()).
+    // Return what the handler returns. RAX preserved since call to handler.
     cb_write_label(cb, BAIL);
-    ret(cb); // Return what the handler returns. RAX preserved since handler return.
+    ret(cb);
+
     cb_write_label(cb, CONTINUE_RUNNING);
     cb_link_labels(cb);
 }
@@ -584,10 +585,6 @@ yjit_gen_block(block_t *block, rb_execution_context_t *ec)
                     status = YJIT_END_BLOCK;
                 }
             }
-        }
-
-        if ( false &&rb_iseq_line_no(jit.iseq, 0) == 854) {
-            fprintf(stderr, "after %04d %s, size: %d\n", insn_idx, insn_name(opcode), ctx->stack_size);
         }
 
         // Move to the next instruction to compile

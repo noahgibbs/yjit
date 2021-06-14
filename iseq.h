@@ -164,6 +164,7 @@ unsigned int *rb_iseq_insns_info_decode_positions(const struct rb_iseq_constant_
 #endif
 
 int rb_vm_insn_addr2opcode(const void *addr);
+int rb_vm_normalize_opcode(int opcode);
 
 RUBY_SYMBOL_EXPORT_BEGIN
 

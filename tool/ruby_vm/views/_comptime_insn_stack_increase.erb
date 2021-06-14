@@ -7,7 +7,7 @@
 %# details.
 %#
 PUREFUNC(MAYBE_UNUSED(static int comptime_insn_stack_increase(int depth, int insn, const VALUE *opes)));
-PUREFUNC(MAYBE_UNUSED(static rb_snum_t insn_stack_increase(enum ruby_vminsn_type insn, const VALUE *opes)));
+PUREFUNC(MAYBE_UNUSED(static rb_snum_t vm_insn_stack_increase(enum ruby_vminsn_type insn, const VALUE *opes)));
 PUREFUNC(static rb_snum_t comptime_insn_stack_increase_dispatch(enum ruby_vminsn_type insn, const VALUE *opes));
 
 rb_snum_t
@@ -55,8 +55,10 @@ comptime_insn_stack_increase_dispatch(enum ruby_vminsn_type insn, const VALUE *o
     }
 }
 
+// Return the change to stack size that the instruction makes.
+// Does not work for trace variant of the opcode.
 rb_snum_t
-insn_stack_increase(enum ruby_vminsn_type insn, const VALUE *opes)
+vm_insn_stack_increase(enum ruby_vminsn_type insn, const VALUE *opes)
 {
     static const signed char t[] = {
 % RubyVM::Instructions.each_slice 8 do |a|

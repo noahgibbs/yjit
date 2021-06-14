@@ -3226,6 +3226,18 @@ rb_vm_insn_addr2opcode(const void *addr)
     rb_bug("rb_vm_insn_addr2opcode: invalid insn address: %p", addr);
 }
 
+// In case of trace variant opcode, return the plain variant.
+int
+rb_vm_normalize_opcode(int opcode)
+{
+    if (opcode > VM_INSTRUCTION_SIZE/2) {
+        return opcode - VM_INSTRUCTION_SIZE/2;
+    }
+    else {
+        return opcode;
+    }
+}
+
 static inline int
 encoded_iseq_trace_instrument(VALUE *iseq_encoded_insn, rb_event_flag_t turnon, bool remain_current_trace)
 {

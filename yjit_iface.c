@@ -47,20 +47,6 @@ static const rb_data_type_t yjit_block_type = {
     0, 0, RUBY_TYPED_FREE_IMMEDIATELY
 };
 
-// Write the YJIT entry point pre-call bytes
-void
-cb_write_pre_call_bytes(codeblock_t* cb)
-{
-    //TODO remove
-}
-
-// Write the YJIT exit post-call bytes
-void
-cb_write_post_call_bytes(codeblock_t* cb)
-{
-    ret(cb);
-}
-
 // Get the PC for a given index in an iseq
 VALUE *
 yjit_iseq_pc_at_idx(const rb_iseq_t *iseq, uint32_t insn_idx)
@@ -91,13 +77,9 @@ map_addr2insn(void *code_ptr, int insn)
 int
 yjit_opcode_at_pc(const rb_iseq_t *iseq, const VALUE *pc)
 {
+    RUBY_ASSERT(FL_TEST_RAW((VALUE)iseq, ISEQ_TRANSLATED));
     const VALUE at_pc = *pc;
-    if (FL_TEST_RAW((VALUE)iseq, ISEQ_TRANSLATED)) {
-        return rb_vm_insn_addr2opcode((const void *)at_pc);
-    }
-    else {
-        return (int)at_pc;
-    }
+    return rb_vm_insn_addr2opcode((const void *)at_pc);
 }
 
 // Verify that calling with cd on receiver goes to callee
