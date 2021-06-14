@@ -1008,7 +1008,7 @@ rb_yjit_call_threshold(void)
 void
 rb_yjit_init(struct rb_yjit_options *options)
 {
-    if (!PLATFORM_SUPPORTED_P) {
+    if (!PLATFORM_SUPPORTED_P || !OPT_CALL_THREADED_CODE) {
         return;
     }
 
