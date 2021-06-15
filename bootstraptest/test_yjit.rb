@@ -1053,3 +1053,21 @@ assert_equal '7', %q{
   foo(5,2)
   foo(5,2)
 }
+
+# test exception handling
+assert_equal 3, %q{
+  def add(a, b)
+    a + b
+  end
+
+  def run
+    add(1, begin
+             raise
+           rescue
+             2
+           end)
+  end
+
+  run
+  run
+}

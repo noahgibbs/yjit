@@ -2512,11 +2512,9 @@ gen_send_cfunc(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const 
     // Pop the C function arguments from the stack (in the caller)
     ctx_stack_pop(ctx, argc + 1);
 
-    if (block) {
-        // Write interpreter SP into CFP.
-        // Needed in case the callee yields to the block.
-        jit_save_sp(jit, ctx);
-    }
+    // Write interpreter SP into CFP.
+    // Needed in case the callee raises an exception and the caller rescues it.
+    jit_save_sp(jit, ctx);
 
     // Save YJIT registers
     yjit_save_regs(cb);
