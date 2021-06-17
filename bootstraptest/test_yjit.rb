@@ -1055,7 +1055,7 @@ assert_equal '7', %q{
 }
 
 # test exception handling
-assert_equal 3, %q{
+assert_equal '3', %q{
   def add(a, b)
     a + b
   end
