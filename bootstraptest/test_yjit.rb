@@ -1040,6 +1040,106 @@ assert_equal 'foo123', %q{
   make_str("foo", 123)
 }
 
+# test invokebuiltin_delegate as used inside Dir.open
+assert_equal '.', %q{
+  def foo(path)
+    Dir.open(path).path
+  end
+
+  foo(".")
+  foo(".")
+}
+
+# test invokebuiltin_delegate_leave in method called from jit
+assert_normal_exit %q{
+  def foo(obj)
+    obj.clone
+  end
+
+  foo(Object.new)
+  foo(Object.new)
+}
+
+# test invokebuiltin_delegate_leave in method called from cfunc
+assert_normal_exit %q{
+  def foo(obj)
+    [obj].map(&:clone)
+  end
+
+  foo(Object.new)
+  foo(Object.new)
+}
+
+# defining TrueClass#!
+assert_equal '[false, false, :ok]', %q{
+  def foo(obj)
+    !obj
+  end
+
+  x = foo(true)
+  y = foo(true)
+
+  class TrueClass
+    def !
+      :ok
+    end
+  end
+
+  z = foo(true)
+
+  [x, y, z]
+}
+
+# defining FalseClass#!
+assert_equal '[true, true, :ok]', %q{
+  def foo(obj)
+    !obj
+  end
+
+  x = foo(false)
+  y = foo(false)
+
+  class FalseClass
+    def !
+      :ok
+    end
+  end
+
+  z = foo(false)
+
+  [x, y, z]
+}
+
+# defining NilClass#!
+assert_equal '[true, true, :ok]', %q{
+  def foo(obj)
+    !obj
+  end
+
+  x = foo(nil)
+  y = foo(nil)
+
+  class NilClass
+    def !
+      :ok
+    end
+  end
+
+  z = foo(nil)
+
+  [x, y, z]
+}
+
+# polymorphic opt_not
+assert_equal '[true, true, false, false, false, false, false]', %q{
+  def foo(obj)
+    !obj
+  end
+
+  foo(0)
+  [foo(nil), foo(false), foo(true), foo([]), foo(0), foo(4.2), foo(:sym)]
+}
+
 # getlocal with 2 levels
 assert_equal '7', %q{
   def foo(foo, bar)
@@ -1090,4 +1190,55 @@ assert_equal '3', %q{
 
   run
   run
+}
+
+# Call to object with singleton
+assert_equal '123', %q{
+  obj = Object.new
+  def obj.foo
+    123
+  end
+
+  def foo(obj)
+    obj.foo()
+  end
+
+  foo(obj)
+  foo(obj)
+}
+
+# Call to singleton class
+assert_equal '123', %q{
+  class Foo
+    def self.foo
+      123
+    end
+  end
+
+  def foo(obj)
+    obj.foo()
+  end
+
+  foo(Foo)
+  foo(Foo)
+}
+
+# invokesuper edge case
+assert_equal '[:A, [:A, :B]]', %q{
+  class B
+    def foo = :B
+  end
+
+  class A < B
+    def foo = [:A, super()]
+  end
+
+  A.new.foo
+  A.new.foo # compile A#foo
+
+  class C < A
+    define_method(:bar, A.instance_method(:foo))
+  end
+
+  C.new.bar
 }

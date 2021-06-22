@@ -2070,51 +2070,8 @@ gen_opt_str_uminus(jitstate_t* jit, ctx_t* ctx)
 }
 
 static codegen_status_t
-gen_opt_not(jitstate_t* jit, ctx_t* ctx)
+gen_opt_not(jitstate_t *jit, ctx_t *ctx)
 {
-    // Defer compilation so we can specialize type of argument
-    if (!jit_at_current_insn(jit)) {
-        defer_compilation(jit->block, jit->insn_idx, ctx);
-        return YJIT_END_BLOCK;
-    }
-
-    uint8_t* side_exit = yjit_side_exit(jit, ctx);
-
-    VALUE comptime_val = jit_peek_at_stack(jit, ctx, 0);
-
-    // For the true/false case
-    if (comptime_val == Qtrue || comptime_val == Qfalse) {
-
-        // Get the operand from the stack
-        x86opnd_t arg = ctx_stack_pop(ctx, 1);
-
-        uint32_t DONE = cb_new_label(cb, "DONE");
-
-        // Qtrue => Qfalse
-        mov(cb, REG0, imm_opnd(Qfalse));
-        cmp(cb, arg, imm_opnd(Qtrue));
-        je_label(cb, DONE);
-
-        // Qfalse => Qtrue
-        mov(cb, REG0, imm_opnd(Qtrue));
-        cmp(cb, arg, imm_opnd(Qfalse));
-        je_label(cb, DONE);
-
-        // For any other values, we side-exit
-        // This never happens in railsbench
-        jmp_ptr(cb, side_exit);
-
-        cb_write_label(cb, DONE);
-        cb_link_labels(cb);
-
-        // Push the return value onto the stack
-        x86opnd_t stack_ret = ctx_stack_push(ctx, TYPE_IMM);
-        mov(cb, stack_ret, REG0);
-
-        return YJIT_KEEP_COMPILING;
-    }
-
-    // Delegate to send, call the method on the recv
     return gen_opt_send_without_block(jit, ctx);
 }
 
@@ -2320,42 +2277,80 @@ Recompile as contingency if possible, or take side exit a last resort.
 static bool
 jit_guard_known_klass(jitstate_t *jit, ctx_t* ctx, VALUE known_klass, insn_opnd_t insn_opnd, const int max_chain_depth, uint8_t *side_exit)
 {
-    // Can't guard for for these classes because some of they are sometimes immediate (special const).
-    // Can remove this by adding appropriate dynamic checks.
-    if (known_klass == rb_cInteger ||
-        known_klass == rb_cSymbol ||
-        known_klass == rb_cFloat ||
-        known_klass == rb_cNilClass ||
-        known_klass == rb_cTrueClass ||
-        known_klass == rb_cFalseClass) {
+    val_type_t val_type = ctx_get_opnd_type(ctx, insn_opnd);
+    bool singleton_klass = FL_TEST(known_klass, FL_SINGLETON);
+
+    if (known_klass == rb_cNilClass) {
+        if (val_type.type != ETYPE_NIL) {
+            ADD_COMMENT(cb, "guard object is nil");
+            cmp(cb, REG0, imm_opnd(Qnil));
+            jit_chain_guard(JCC_JNE, jit, ctx, max_chain_depth, side_exit);
+
+            ctx_set_opnd_type(ctx, insn_opnd, TYPE_NIL);
+        }
+    }
+    else if (known_klass == rb_cTrueClass) {
+        if (val_type.type != ETYPE_TRUE) {
+            ADD_COMMENT(cb, "guard object is true");
+            cmp(cb, REG0, imm_opnd(Qtrue));
+            jit_chain_guard(JCC_JNE, jit, ctx, max_chain_depth, side_exit);
+
+            ctx_set_opnd_type(ctx, insn_opnd, TYPE_TRUE);
+        }
+    }
+    else if (known_klass == rb_cFalseClass) {
+        if (val_type.type != ETYPE_FALSE) {
+            ADD_COMMENT(cb, "guard object is false");
+            STATIC_ASSERT(qfalse_is_zero, Qfalse == 0);
+            test(cb, REG0, REG0);
+            jit_chain_guard(JCC_JNZ, jit, ctx, max_chain_depth, side_exit);
+
+            ctx_set_opnd_type(ctx, insn_opnd, TYPE_FALSE);
+        }
+    }
+    else if (known_klass == rb_cInteger ||
+            known_klass == rb_cSymbol ||
+            known_klass == rb_cFloat) {
+        // Can't guard for for these classes because some of they are sometimes
+        // immediate (special const). Can remove this by adding appropriate
+        // dynamic checks.
         return false;
     }
+    else if (singleton_klass) {
+        // Singleton classes are attached to one specific object, so we can
+        // avoid one memory access (and potentially the is_heap check) by
+        // looking for the expected object directly.
+        ADD_COMMENT(cb, "guard known object with singleton class");
+        VALUE known_obj = rb_attr_get(known_klass, id__attached__);
+        // TODO: jit_mov_gc_ptr keeps a strong reference, which leaks the object.
+        jit_mov_gc_ptr(jit, cb, REG1, known_obj);
+        cmp(cb, REG0, REG1);
+        jit_chain_guard(JCC_JNE, jit, ctx, max_chain_depth, side_exit);
+    }
+    else {
+        // Check that the receiver is a heap object
+        // Note: if we get here, the class doesn't have immediate instances.
+        if (!val_type.is_heap) {
+            ADD_COMMENT(cb, "guard not immediate");
+            RUBY_ASSERT(Qfalse < Qnil);
+            test(cb, REG0, imm_opnd(RUBY_IMMEDIATE_MASK));
+            jnz_ptr(cb, side_exit);
+            cmp(cb, REG0, imm_opnd(Qnil));
+            jbe_ptr(cb, side_exit);
 
-    val_type_t val_type = ctx_get_opnd_type(ctx, insn_opnd);
+            ctx_set_opnd_type(ctx, insn_opnd, TYPE_HEAP);
+        }
 
-    // Check that the receiver is a heap object
-    if (!val_type.is_heap)
-    {
-        // FIXME: use two comparisons instead of 3 here
-        ADD_COMMENT(cb, "guard not immediate");
-        RUBY_ASSERT(Qfalse < Qnil);
-        test(cb, REG0, imm_opnd(RUBY_IMMEDIATE_MASK));
-        jnz_ptr(cb, side_exit);
-        cmp(cb, REG0, imm_opnd(Qnil));
-        jbe_ptr(cb, side_exit);
+        x86opnd_t klass_opnd = mem_opnd(64, REG0, offsetof(struct RBasic, klass));
 
-        ctx_set_opnd_type(ctx, insn_opnd, TYPE_HEAP);
+        // Bail if receiver class is different from known_klass
+        // TODO: jit_mov_gc_ptr keeps a strong reference, which leaks the class.
+        ADD_COMMENT(cb, "guard known class");
+        jit_mov_gc_ptr(jit, cb, REG1, known_klass);
+        cmp(cb, klass_opnd, REG1);
+        jit_chain_guard(JCC_JNE, jit, ctx, max_chain_depth, side_exit);
     }
 
-    // Pointer to the klass field of the receiver &(recv->klass)
-    x86opnd_t klass_opnd = mem_opnd(64, REG0, offsetof(struct RBasic, klass));
-
-    // Bail if receiver class is different from known_klass
-    // TODO: jit_mov_gc_ptr keeps a strong reference, which leaks the class.
-    ADD_COMMENT(cb, "guard known class");
-    jit_mov_gc_ptr(jit, cb, REG1, known_klass);
-    cmp(cb, klass_opnd, REG1);
-    jit_chain_guard(JCC_JNE, jit, ctx, max_chain_depth, side_exit);
     return true;
 }
 
@@ -2374,6 +2369,48 @@ jit_protected_callee_ancestry_guard(jitstate_t *jit, codeblock_t *cb, const rb_c
     yjit_load_regs(cb);
     test(cb, RAX, RAX);
     jz_ptr(cb, COUNTED_EXIT(side_exit, send_se_protected_check_failed));
+}
+
+// Return true when the codegen function generates code.
+typedef bool (*cfunc_codegen_t)(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const rb_callable_method_entry_t *cme, rb_iseq_t *block, const int32_t argc);
+
+// Codegen for rb_obj_not().
+// Note, caller is responsible for generating all the right guards, including
+// arity guards.
+static bool
+jit_rb_obj_not(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const rb_callable_method_entry_t *cme, rb_iseq_t *block, const int32_t argc)
+{
+    const val_type_t recv_opnd = ctx_get_opnd_type(ctx, OPND_STACK(0));
+    x86opnd_t out_opnd = ctx_stack_opnd(ctx, 0);
+
+    if (recv_opnd.type == ETYPE_NIL || recv_opnd.type == ETYPE_FALSE) {
+        ADD_COMMENT(cb, "rb_obj_not(nil_or_false)");
+        mov(cb, out_opnd, imm_opnd(Qtrue));
+        ctx_set_opnd_type(ctx, OPND_STACK(0), TYPE_TRUE);
+    }
+    else if (recv_opnd.is_heap || recv_opnd.type != ETYPE_UNKNOWN) {
+        // Note: recv_opnd.type != ETYPE_NIL && recv_opnd.type != ETYPE_FALSE.
+        ADD_COMMENT(cb, "rb_obj_not(truthy)");
+        mov(cb, out_opnd, imm_opnd(Qfalse));
+        ctx_set_opnd_type(ctx, OPND_STACK(0), TYPE_FALSE);
+    }
+    else {
+        // jit_guard_known_klass() already ran on the receiver which should
+        // have deduced deduced the type of the receiver. This case should be
+        // rare if not unreachable.
+        return false;
+    }
+    return true;
+}
+
+// Check if we know how to codegen for a particular cfunc method
+static cfunc_codegen_t
+lookup_cfunc_codegen(const rb_method_cfunc_t *cfunc)
+{
+    if (cfunc->func == rb_obj_not) {
+        return jit_rb_obj_not;
+    }
+    return NULL;
 }
 
 static codegen_status_t
@@ -2397,6 +2434,19 @@ gen_send_cfunc(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const 
     if (argc + 1 > NUM_C_ARG_REGS) {
         GEN_COUNTER_INC(cb, send_cfunc_toomany_args);
         return YJIT_CANT_COMPILE;
+    }
+
+    // Delegate to codegen for C methods if we have it.
+    {
+        cfunc_codegen_t known_cfunc_codegen;
+        if ((known_cfunc_codegen = lookup_cfunc_codegen(cfunc))) {
+            if (known_cfunc_codegen(jit, ctx, ci, cme, block, argc)) {
+                // cfunc codegen generated code. Terminate the block so
+                // there isn't multiple calls in the same block.
+                jit_jump_to_next_insn(jit, ctx);
+                return YJIT_END_BLOCK;
+            }
+        }
     }
 
     // Callee method ID
@@ -2559,6 +2609,9 @@ gen_send_cfunc(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const 
         member_opnd(REG_EC, rb_execution_context_t, cfp),
         imm_opnd(sizeof(rb_control_frame_t))
     );
+
+    // cfunc calls may corrupt types
+    ctx_clear_local_types(ctx);
 
     // Note: gen_oswb_iseq() jumps to the next instruction with ctx->sp_offset == 0
     // after the call, while this does not. This difference prevents
@@ -2727,6 +2780,9 @@ gen_send_iseq(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const r
         x86opnd_t stack_ret = ctx_stack_push(ctx, TYPE_UNKNOWN);
         mov(cb, stack_ret, RAX);
 
+        // Note: assuming that the leaf builtin doesn't change local variables here.
+        // Seems like a safe assumption.
+
         return YJIT_KEEP_COMPILING;
     }
 
@@ -2826,6 +2882,9 @@ gen_send_iseq(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const r
     }
     val_type_t recv_type = ctx_get_opnd_type(ctx, OPND_STACK(argc));
     ctx_set_opnd_type(&callee_ctx, OPND_SELF, recv_type);
+
+    // The callee might change locals through Kernel#binding and other means.
+    ctx_clear_local_types(ctx);
 
     // Pop arguments and receiver in return context, push the return value
     // After the return, the JIT and interpreter SP will match up
@@ -2946,9 +3005,6 @@ gen_send_general(jitstate_t *jit, ctx_t *ctx, struct rb_call_data *cd, rb_iseq_t
     RUBY_ASSERT(cme->called_id == mid);
     assume_method_lookup_stable(comptime_recv_klass, cme, jit->block);
 
-    // Method calls may corrupt types
-    ctx_clear_local_types(ctx);
-
     // To handle the aliased method case (VM_METHOD_TYPE_ALIAS)
     while (true) {
         // switch on the method type
@@ -3021,6 +3077,7 @@ gen_send(jitstate_t *jit, ctx_t *ctx)
     return gen_send_general(jit, ctx, cd, block);
 }
 
+RBIMPL_ATTR_MAYBE_UNUSED() // not in use as it has problems in some situations.
 static codegen_status_t
 gen_invokesuper(jitstate_t *jit, ctx_t *ctx)
 {
@@ -3272,6 +3329,56 @@ gen_getblockparamproxy(jitstate_t *jit, ctx_t *ctx)
     return YJIT_KEEP_COMPILING;
 }
 
+// opt_invokebuiltin_delegate calls a builtin function, like
+// invokebuiltin does, but instead of taking arguments from the top of the
+// stack uses the argument locals (and self) from the current method.
+static codegen_status_t
+gen_opt_invokebuiltin_delegate(jitstate_t *jit, ctx_t *ctx)
+{
+    const struct rb_builtin_function *bf = (struct rb_builtin_function *)jit_get_arg(jit, 0);
+    int32_t start_index = (int32_t)jit_get_arg(jit, 1);
+
+    if (bf->argc + 2 >= NUM_C_ARG_REGS) {
+        return YJIT_CANT_COMPILE;
+    }
+
+    // If the calls don't allocate, do they need up to date PC, SP?
+    jit_save_pc(jit, REG0);
+    jit_save_sp(jit, ctx);
+
+    // Save YJIT registers
+    yjit_save_regs(cb);
+
+    if (bf->argc > 0) {
+        // Load environment pointer EP from CFP
+        mov(cb, REG0, member_opnd(REG_CFP, rb_control_frame_t, ep));
+    }
+
+    // Save self from CFP
+    mov(cb, REG1, member_opnd(REG_CFP, rb_control_frame_t, self));
+
+    // Call the builtin func (ec, recv, arg1, arg2, ...)
+    mov(cb, C_ARG_REGS[0], REG_EC); // clobbers REG_CFP
+    mov(cb, C_ARG_REGS[1], REG1); // self, clobbers REG_EC
+
+    // Copy arguments from locals
+    for (int32_t i = 0; i < bf->argc; i++) {
+        const int32_t offs = -jit->iseq->body->local_table_size - VM_ENV_DATA_SIZE + 1 + start_index + i;
+        x86opnd_t local_opnd = mem_opnd(64, REG0, offs * SIZEOF_VALUE);
+        x86opnd_t c_arg_reg = C_ARG_REGS[i + 2];
+        mov(cb, c_arg_reg, local_opnd);
+    }
+    call_ptr(cb, REG0, (void *)bf->func_ptr);
+
+    // Load YJIT registers
+    yjit_load_regs(cb);
+
+    // Push the return value
+    x86opnd_t stack_ret = ctx_stack_push(ctx, TYPE_UNKNOWN);
+    mov(cb, stack_ret, RAX);
+
+    return YJIT_KEEP_COMPILING;
+}
 
 static void
 yjit_reg_op(int opcode, codegen_fn gen_fn)
@@ -3343,6 +3450,8 @@ yjit_init_codegen(void)
     yjit_reg_op(BIN(opt_str_uminus), gen_opt_str_uminus);
     yjit_reg_op(BIN(opt_not), gen_opt_not);
     yjit_reg_op(BIN(opt_getinlinecache), gen_opt_getinlinecache);
+    yjit_reg_op(BIN(opt_invokebuiltin_delegate), gen_opt_invokebuiltin_delegate);
+    yjit_reg_op(BIN(opt_invokebuiltin_delegate_leave), gen_opt_invokebuiltin_delegate);
     yjit_reg_op(BIN(branchif), gen_branchif);
     yjit_reg_op(BIN(branchunless), gen_branchunless);
     yjit_reg_op(BIN(branchnil), gen_branchnil);
@@ -3350,6 +3459,5 @@ yjit_init_codegen(void)
     yjit_reg_op(BIN(getblockparamproxy), gen_getblockparamproxy);
     yjit_reg_op(BIN(opt_send_without_block), gen_opt_send_without_block);
     yjit_reg_op(BIN(send), gen_send);
-    yjit_reg_op(BIN(invokesuper), gen_invokesuper);
     yjit_reg_op(BIN(leave), gen_leave);
 }
