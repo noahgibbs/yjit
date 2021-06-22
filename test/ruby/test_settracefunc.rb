@@ -1,6 +1,10 @@
 # frozen_string_literal: false
 require 'test/unit'
 
+# YJIT's TracePoint support is incomplete at the moment.
+# https://github.com/Shopify/yjit/issues/54
+return if defined?(YJIT)
+
 class TestSetTraceFunc < Test::Unit::TestCase
   def setup
     if defined?(RubyVM)

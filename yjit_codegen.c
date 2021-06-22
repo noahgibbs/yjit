@@ -2436,6 +2436,11 @@ gen_send_cfunc(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const 
         return YJIT_CANT_COMPILE;
     }
 
+    // Don't JIT when c_call or c_return TracePoints are active.
+    if (EVENT_HOOK_ACTIVE_P(jit->ec, RUBY_EVENT_C_CALL) || EVENT_HOOK_ACTIVE_P(jit->ec, RUBY_EVENT_C_RETURN)) {
+        return YJIT_CANT_COMPILE;
+    }
+
     // Delegate to codegen for C methods if we have it.
     {
         cfunc_codegen_t known_cfunc_codegen;

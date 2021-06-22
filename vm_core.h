@@ -2030,6 +2030,8 @@ rb_ec_ractor_hooks(const rb_execution_context_t *ec)
 #define EXEC_EVENT_HOOK_AND_POP_FRAME(ec_, flag_, self_, id_, called_id_, klass_, data_) \
   EXEC_EVENT_HOOK_ORIG(ec_, rb_ec_ractor_hooks(ec_), flag_, self_, id_, called_id_, klass_, data_, 1)
 
+#define EVENT_HOOK_ACTIVE_P(ec_, flag_) ((rb_ec_ractor_hooks(ec_)->events & (flag_)))
+
 static inline void
 rb_exec_event_hook_script_compiled(rb_execution_context_t *ec, const rb_iseq_t *iseq, VALUE eval_script)
 {
