@@ -121,6 +121,11 @@ module YJIT
     end
   end
 
+  def self.yjit_code_sizes
+    # defined in yjit_iface.c
+    Primitive.yjit_code_sizes
+  end
+
   # Return a hash for statistics generated for the --yjit-stats command line option.
   # Return nil when option is not passed or unavailable.
   def self.runtime_stats

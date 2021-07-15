@@ -709,6 +709,30 @@ comments_for(rb_execution_context_t *ec, VALUE self, VALUE start_address, VALUE 
     return comment_array;
 }
 
+// Primitive called in yjit.rb. Export YJIT code sizes as a Ruby hash.
+static VALUE
+yjit_code_sizes(rb_execution_context_t *ec, VALUE self)
+{
+    VALUE hash = rb_hash_new();
+
+    RB_VM_LOCK_ENTER();
+
+    {
+        VALUE key = ID2SYM(rb_intern("inline_code_size"));
+        VALUE value = LL2NUM((long long)cb->write_pos);
+        rb_hash_aset(hash, key, value);
+
+        key = ID2SYM(rb_intern("outlined_code_size"));
+        value = LL2NUM((long long)ocb->write_pos);
+        rb_hash_aset(hash, key, value);
+    }
+
+    RB_VM_LOCK_LEAVE();
+
+    return hash;
+}
+
+
 // Primitive called in yjit.rb. Export all YJIT statistics as a Ruby hash.
 static VALUE
 get_yjit_stats(rb_execution_context_t *ec, VALUE self)
