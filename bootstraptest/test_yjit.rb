@@ -1599,3 +1599,16 @@ assert_equal '10', %q{
 
   val
 }
+
+# Regression test for a context diffing bug.
+# Local stack mapping were seen as compatible with stack mappings, leading
+# to type info propogating to a local when the stack value isn't a local.
+assert_normal_exit %q{
+  def host(v)
+    !(v&.start_with?('a'))
+    v.itself
+  end
+
+  host(nil)
+  host("")
+}

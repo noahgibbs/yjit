@@ -310,6 +310,18 @@ int ctx_diff(const ctx_t* src, const ctx_t* dst)
         diff += temp_diff;
     }
 
+    // For each temp mapping
+    int mapping_count = src->stack_size;
+    if (mapping_count > MAX_TEMP_TYPES) {
+        mapping_count = MAX_TEMP_TYPES;
+    }
+    for (int mapping_idx = mapping_count - 1; mapping_idx >= 0; --mapping_idx) {
+        // If the mapping kind is different
+        if (src->temp_mapping[mapping_idx].kind != dst->temp_mapping[mapping_idx].kind) {
+            return INT_MAX;
+        }
+    }
+
     return diff;
 }
 
