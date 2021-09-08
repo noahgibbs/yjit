@@ -771,8 +771,8 @@ branch_stub_hit(branch_t* branch, const uint32_t target_idx, rb_execution_contex
         ec->cfp->pc = yjit_iseq_pc_at_idx(target.iseq, target.idx);
 
         // Get a code block for this branch
-        codeblock_t* cb = NULL;
-        rb_yjit_get_cb(cb, branch->start_pos);
+        codeblock_t cb;
+        rb_yjit_get_cb(&cb, branch->start_pos);
 
         // Try to find an existing compiled version of this block
         block_t* p_block = find_block_version(target, target_ctx);

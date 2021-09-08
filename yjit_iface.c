@@ -954,6 +954,8 @@ rb_yjit_iseq_free(const struct rb_iseq_constant_body *body)
 static void
 yjit_code_page_free(void *code_page)
 {
+    fprintf(stderr, "FREEING CODE PAGE\n");
+
     free_code_page((code_page_t*)code_page);
 }
 
@@ -1001,6 +1003,7 @@ void rb_yjit_get_cb(codeblock_t* cb, uint8_t* code_ptr)
     // A pointer to the page wrapper object is written at the start of the code page
     uint8_t* mem_block = code_page->mem_block + sizeof(VALUE);
     uint32_t mem_size = (code_page->page_size/2) - sizeof(VALUE);
+    RUBY_ASSERT(mem_block);
 
     // Map the code block to this memory region
     cb_init(cb, mem_block, mem_size);
@@ -1015,6 +1018,7 @@ void rb_yjit_get_ocb(codeblock_t* cb, uint8_t* code_ptr)
     // A pointer to the page wrapper object is written at the start of the code page
     uint8_t* mem_block = code_page->mem_block + (code_page->page_size/2);
     uint32_t mem_size = code_page->page_size/2;
+    RUBY_ASSERT(mem_block);
 
     // Map the code block to this memory region
     cb_init(cb, mem_block, mem_size);

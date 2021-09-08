@@ -71,10 +71,12 @@ yjit_new_code_page(void)
     // Map the inline code block
     cb = &block;
     rb_yjit_get_cb(cb, code_page->mem_block);
+    RUBY_ASSERT(cb->mem_block);
 
     // Map the outlined code block
     ocb = &outline_block;
-    rb_yjit_get_ocb(cb, code_page->mem_block);
+    rb_yjit_get_ocb(ocb, code_page->mem_block);
+    RUBY_ASSERT(ocb->mem_block);
 
     yjit_cur_code_page = new_code_page;
 }

@@ -256,6 +256,7 @@ void free_code_page(code_page_t* code_page)
 // Initialize a code block object
 void cb_init(codeblock_t* cb, uint8_t* mem_block, uint32_t mem_size)
 {
+    assert (mem_block);
     cb->mem_block = mem_block;
     cb->mem_size = mem_size;
     cb->write_pos = 0;
