@@ -41,7 +41,11 @@ typedef rb_iseq_t *ISEQ;
 /* #define throwdebug printf */
 
 #ifndef USE_INSNS_COUNTER
-#define USE_INSNS_COUNTER 0
+#  ifdef YJIT_STATS
+#    define USE_INSNS_COUNTER 1
+#  else
+#    define USE_INSNS_COUNTER 0
+#  endif
 #endif
 
 /************************************************/
