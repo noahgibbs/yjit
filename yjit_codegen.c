@@ -2930,7 +2930,7 @@ gen_send_cfunc(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const 
 
 
 
-    mov(cb, REG0, imm_opnd(2000));
+    mov(cb, REG0, imm_opnd(1000));
     uint32_t loop = cb_new_label(cb, "loop");
     cb_write_label(cb, loop);
     sub(cb, REG0, imm_opnd(1));
