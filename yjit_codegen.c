@@ -2928,6 +2928,21 @@ gen_send_cfunc(jitstate_t *jit, ctx_t *ctx, const struct rb_callinfo *ci, const 
     // Store incremented PC into current control frame in case callee raises.
     jit_save_pc(jit, REG0);
 
+
+
+    mov(cb, REG0, imm_opnd(2000));
+    uint32_t loop = cb_new_label(cb, "loop");
+    cb_write_label(cb, loop);
+    sub(cb, REG0, imm_opnd(1));
+    cmp(cb, REG0, imm_opnd(0));
+    jnz_label(cb, loop);
+    cb_link_labels(cb);
+
+
+
+
+
+
     if (block) {
         // Change cfp->block_code in the current frame. See vm_caller_setup_arg_block().
         // VM_CFP_TO_CAPTURED_BLCOK does &cfp->self, rb_captured_block->code.iseq aliases
