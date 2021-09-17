@@ -5525,6 +5525,10 @@ Init_Thread(void)
 
     rb_eThreadError = rb_define_class("ThreadError", rb_eStandardError);
 
+#ifdef __AFL_HAVE_MANUAL_CONTROL
+    __AFL_INIT();
+#endif
+
     /* init thread core */
     {
 	/* main thread setting */

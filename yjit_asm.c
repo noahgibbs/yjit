@@ -17,6 +17,9 @@
 
 #include "yjit_asm.h"
 
+/* Make sure asserts are turned on, regardless of RUBY_DEBUG setting */
+#undef NDEBUG
+
 // Compute the number of bits needed to encode a signed value
 uint32_t sig_imm_size(int64_t imm)
 {

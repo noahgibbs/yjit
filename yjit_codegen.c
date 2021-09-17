@@ -22,6 +22,10 @@
 #include "yjit_asm.h"
 #include "yjit_utils.h"
 
+#undef NDEBUG
+#undef RUBY_ASSERT
+#define RUBY_ASSERT(a) if(!(a)) { printf("Assertion failure! %s\n", #a); abort(); }
+
 // Map from YARV opcodes to code generation functions
 static codegen_fn gen_fns[VM_INSTRUCTION_SIZE] = { NULL };
 
@@ -2453,6 +2457,10 @@ gen_opt_mod(jitstate_t* jit, ctx_t* ctx)
     // Save the PC and SP because the callee may allocate bignums
     // Note that this modifies REG_SP, which is why we do it first
     jit_prepare_routine_call(jit, ctx, REG0);
+
+    if(getenv("FAKE_BUG")) {
+      rb_bug("fake gen_opt_mod");
+    }
 
     uint8_t* side_exit = yjit_side_exit(jit, ctx);
 
